@@ -254,8 +254,8 @@ def build_gh_pr_command(service_context, all_prs=False, team=False):
     """Build gh pr list command with appropriate filters."""
     base_cmd = ["gh", "pr", "list", "--state", "open"]
 
-    # JSON fields to retrieve - note: reviewRequests for reviewer detection
-    json_fields = "number,title,headRefName,statusCheckRollup,reviewRequests,url,author"
+    # JSON fields to retrieve - note: reviewRequests for reviewer detection, reviews for review count
+    json_fields = "number,title,headRefName,statusCheckRollup,reviewRequests,reviews,url,author"
     base_cmd.extend(["--json", json_fields])
 
     # Filter by author unless --all specified
@@ -341,7 +341,7 @@ GitHub PRs
       https://github.com/techops/keeperhub-api/pull/123
 
 #456  [Open] [CI: Fail]     fix: memory leak in worker
-      Branch: fix/memory-leak | Author: @me
+      Branch: fix/memory-leak | Author: @me | Reviews: 2/3
       https://github.com/techops/keeperhub-api/pull/456
 ```
 
@@ -402,7 +402,13 @@ def render_github_section(service_context, verbose=False, all_prs=False, team=Fa
                 branch = pr.get('headRefName', '')
                 author = pr.get('author', {}).get('login', '@me')
                 url = pr.get('url', '')
-                print(f"      Branch: {branch} | Author: @{author}")
+                # Count reviews (approved/pending/changes_requested)
+                reviews = pr.get('reviews', [])
+                review_requests = pr.get('reviewRequests', [])
+                reviews_completed = len([r for r in reviews if r.get('state') in ['APPROVED', 'CHANGES_REQUESTED']])
+                reviews_requested = len(review_requests) + reviews_completed
+                review_info = f" | Reviews: {reviews_completed}/{reviews_requested}" if reviews_requested > 0 else ""
+                print(f"      Branch: {branch} | Author: @{author}{review_info}")
                 if url:
                     print(f"      {url}")
                 print()
@@ -861,6 +867,48 @@ Tickets: 2 | PRs: 2 | Deploys: 2
 **Detailed output:**
 ```
 /kh:status --verbose
+```
+
+Output:
+```
+=== KeeperHub Status: keeperhub-api ===
+
+Needs Attention
+---------------
+PR #789   Review requested: Add OAuth support
+
+Jira Tickets
+------------
+KH-123  [In Progress]  Implement user authentication
+        Assignee: @john.doe | Created: 2024-01-15
+        https://yourorg.atlassian.net/browse/KH-123
+
+KH-456  [To Do]        Update API documentation
+        Assignee: @jane.doe | Created: 2024-01-20
+        https://yourorg.atlassian.net/browse/KH-456
+
+GitHub PRs
+----------
+#123  [Open] [CI: Pass]  feat: add login endpoint
+      Branch: feature/login | Author: @johndoe
+      https://github.com/org/repo/pull/123
+
+#456  [Open] [CI: Fail]  fix: memory leak
+      Branch: fix/memory | Author: @janedoe | Reviews: 2/3
+      https://github.com/org/repo/pull/456
+
+Deployments
+-----------
+staging  [Deployed]  v1.2.3  2h ago
+         Image: registry.io/app:v1.2.3
+         Replicas: 3/3 ready  Updated: 2024-01-25T14:30:00Z
+
+prod     [Deployed]  v1.2.2  3d ago
+         Image: registry.io/app:v1.2.2
+         Replicas: 5/5 ready  Updated: 2024-01-22T09:15:00Z
+
+---
+Tickets: 2 | PRs: 2 | Deploys: 2
 ```
 
 **Override service context:**
