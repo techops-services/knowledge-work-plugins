@@ -1,0 +1,8 @@
+{
+  "name": "kh",
+  "version": "1.0.0",
+  "description": "Unified KeeperHub development workflow - manage Jira tickets, GitHub PRs, and deployments from a single interface.",
+  "author": {
+    "name": "TechOps"
+  }
+}
