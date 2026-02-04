@@ -627,7 +627,7 @@ securely access my account without managing passwords.
 Labels: backend, security, sprint-5
 
 Linked PRs:
-- #456 [Open] [CI: Pass] KH-123: Add auth endpoint
+- #456 [Open] KH-123: Add auth endpoint
 ```
 
 **Transition to a new status:**
@@ -640,8 +640,21 @@ Output:
 Transitioned KH-123 from 'In Progress' to 'Testing Staging'
 
 KH-123: Implement user authentication
+======================================
 Status:     [Testing Staging]
-...
+Assignee:   @alice.smith
+Priority:   High
+Created:    2024-01-15
+Updated:    2024-01-26
+
+Description:
+As a user, I want to authenticate using OAuth2 so that I can
+securely access my account without managing passwords.
+
+Labels: backend, security, sprint-5
+
+Linked PRs:
+- #456 [Merged] KH-123: Add auth endpoint
 ```
 
 **View with full history:**
@@ -649,7 +662,47 @@ Status:     [Testing Staging]
 /kh:ticket KH-123 --verbose
 ```
 
-Output includes recent comments and activity log.
+Output:
+```
+KH-123: Implement user authentication
+======================================
+Status:     [In Progress]
+Assignee:   @alice.smith
+Priority:   High
+Created:    2024-01-15
+Updated:    2024-01-25
+
+Description:
+As a user, I want to authenticate using OAuth2 so that I can
+securely access my account without managing passwords.
+
+Acceptance criteria:
+- Support Google OAuth2
+- Support GitHub OAuth2
+- Session management with secure cookies
+- Rate limiting on auth endpoints
+
+Labels: backend, security, sprint-5
+
+Linked PRs:
+- #456 [Merged] KH-123: Add auth endpoint
+- #789 [Open] KH-123: Fix auth token expiry
+
+Recent Comments (3):
+---------------
+@bob.smith (2024-01-25):
+PR approved, ready for staging deploy.
+
+@alice.smith (2024-01-24):
+Tests passing, requesting review.
+
+@pm.person (2024-01-20):
+Adding to sprint 5, priority high.
+
+Activity:
+- 2024-01-25: Last updated
+- 2024-01-15: Created by @pm.person
+```
 
 **Add a comment:**
 ```
@@ -665,6 +718,20 @@ Author: @me
 Time: 2024-01-26 10:30
 ```
 
+**Use shorthand transition:**
+```
+/kh:ticket KH-123 --move staging
+```
+
+Output:
+```
+Transitioned KH-123 from 'In Progress' to 'Testing Staging'
+
+KH-123: Implement user authentication
+Status:     [Testing Staging]
+...
+```
+
 **Invalid transition:**
 ```
 /kh:ticket KH-123 --move "Done"
@@ -672,8 +739,7 @@ Time: 2024-01-26 10:30
 
 Output:
 ```
-[Error] Cannot transition directly to 'Done' from 'In Progress'.
-Available transitions: Testing Staging, Blocked
+[Error] Cannot move to 'Done'. Available: Testing Staging, Blocked
 ```
 
 ## Quick Transitions
