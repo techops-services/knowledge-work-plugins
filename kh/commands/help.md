@@ -28,8 +28,9 @@ Unified workflow for Jira tickets, GitHub PRs, and deployments.
 | Alias | Expands To |
 |-------|------------|
 | /kh:s | /kh:status |
-
-Additional aliases will be added as commands are built.
+| /kh:ts | /kh:tickets |
+| /kh:issues | /kh:tickets |
+| /kh:my-tickets | /kh:tickets |
 
 ## Grouped Commands
 
