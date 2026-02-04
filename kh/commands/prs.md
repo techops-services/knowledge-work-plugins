@@ -630,6 +630,20 @@ Open PRs (2)
       https://github.com/org/repo/pull/456
 ```
 
+**Override service context:**
+```
+/kh:prs --service=keeperhub-worker
+```
+
+This queries PRs for a specific service repository regardless of your current working directory.
+
+**Combined filters example:**
+```
+/kh:prs --needs-review --verbose
+```
+
+Output shows PRs needing your review with full details including description and comment count.
+
 ## Filter Precedence
 
 Filters can be combined. When multiple filters are specified:
@@ -643,7 +657,9 @@ Examples:
 
 ## Aliases
 
-| Alias | Command |
-|-------|---------|
-| /kh:pulls | /kh:prs |
-| /kh:list-prs | /kh:prs |
+| Alias | Command | Notes |
+|-------|---------|-------|
+| /kh:pulls | /kh:prs | Short alias |
+| /kh:list-prs | /kh:prs | Verbose alias |
+
+All aliases support the same flags as the main command.
