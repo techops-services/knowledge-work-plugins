@@ -439,3 +439,164 @@ Output:
 Creating PR from branch KH-123-add-auth...
 ...
 ```
+
+## Examples
+
+**Basic PR creation (auto-detects everything):**
+```
+/kh:pr
+```
+
+Output (branch: KH-123-add-auth):
+```
+Creating PR from branch KH-123-add-auth...
+Detected Jira ticket: KH-123
+Generated title: KH-123: Add auth
+
+Created PR #456: KH-123: Add auth
+https://github.com/org/repo/pull/456
+```
+
+**Create as draft:**
+```
+/kh:pr --draft
+```
+
+Output (branch: feature/login):
+```
+Creating PR from branch feature/login...
+Generated title: feat: login
+
+Created draft PR #457: feat: login
+https://github.com/org/repo/pull/457
+```
+
+**Custom title:**
+```
+/kh:pr --title "Fix critical security bug"
+```
+
+Output:
+```
+Creating PR from branch fix/security-issue...
+Generated title: Fix critical security bug
+
+Created PR #458: Fix critical security bug
+https://github.com/org/repo/pull/458
+```
+
+**Target different base branch:**
+```
+/kh:pr --base main
+```
+
+Output:
+```
+Creating PR from branch hotfix/urgent-fix...
+Generated title: fix: urgent fix
+
+Created PR #459: fix: urgent fix
+https://github.com/org/repo/pull/459
+```
+
+**Skip Jira linking:**
+```
+/kh:pr --no-link
+```
+
+Output (branch: KH-123-add-auth):
+```
+Creating PR from branch KH-123-add-auth...
+Generated title: KH-123: Add auth
+
+Created PR #460: KH-123: Add auth
+https://github.com/org/repo/pull/460
+```
+
+Note: PR body will not include the Jira link section when --no-link is used.
+
+**Custom body:**
+```
+/kh:pr --body "## Summary\nRefactored auth module for better security."
+```
+
+Output:
+```
+Creating PR from branch KH-789-refactor-auth...
+Detected Jira ticket: KH-789
+Generated title: KH-789: Refactor auth
+
+Created PR #461: KH-789: Refactor auth
+https://github.com/org/repo/pull/461
+```
+
+**Draft with custom title and different base:**
+```
+/kh:pr --draft --title "WIP: New feature" --base develop
+```
+
+Output:
+```
+Creating PR from branch feature/experimental...
+Generated title: WIP: New feature
+
+Created draft PR #462: WIP: New feature
+https://github.com/org/repo/pull/462
+```
+
+## Error States
+
+**On base branch:**
+```
+/kh:pr
+```
+Output:
+```
+[Error] Cannot create PR from staging. Checkout a feature branch first.
+```
+
+**PR already exists:**
+```
+/kh:pr
+```
+Output:
+```
+Creating PR from branch KH-123-add-auth...
+Detected Jira ticket: KH-123
+Generated title: KH-123: Add auth
+
+[Note] PR already exists for this branch: https://github.com/org/repo/pull/123
+```
+
+**No remote configured:**
+```
+/kh:pr
+```
+Output:
+```
+[Error] No git remote configured. Run `git remote add origin <url>` first.
+```
+
+**GitHub not authenticated:**
+```
+/kh:pr
+```
+Output:
+```
+[Error] GitHub not authenticated. Run `gh auth login`
+```
+
+**Detached HEAD state:**
+```
+/kh:pr
+```
+Output:
+```
+[Error] Cannot determine current branch. Are you in detached HEAD state?
+```
+
+## Aliases
+
+| Alias | Command |
+|-------|---------|
+| /kh:create-pr | /kh:pr |
