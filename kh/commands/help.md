@@ -17,7 +17,7 @@ Unified workflow for Jira tickets, GitHub PRs, and deployments.
 
 | Command | Description |
 |---------|-------------|
-| /kh:status | View unified dashboard (tickets, PRs, deploys) |
+| /kh:status | View unified dashboard (Jira, PRs) |
 | /kh:pr | Create PR from current branch |
 | /kh:ticket | View or update a Jira ticket |
 | /kh:help | Show this help |
@@ -71,3 +71,27 @@ All commands use plain text status labels:
 - [Deployed], [Pending], [Failed] for deployments
 
 Use `--verbose` or `-v` flag with any command for detailed output.
+
+## Common Flags
+
+| Flag | Description |
+|------|-------------|
+| --verbose, -v | Show detailed output with dates, URLs |
+| --service=name | Override service auto-detection |
+
+## Examples
+
+Quick status check:
+```
+/kh:status
+```
+
+Just my tickets:
+```
+/kh:status --jira
+```
+
+All team PRs:
+```
+/kh:status --prs --team
+```
