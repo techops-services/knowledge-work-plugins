@@ -1,18 +1,18 @@
 ---
-description: View unified dashboard showing Jira tickets and GitHub PRs
+description: View unified dashboard showing Jira tickets, GitHub PRs, and deployment status
 arguments:
   --jira: Show only Jira tickets section
   --prs: Show only GitHub PRs section
-  --deploys: Show only deploy status section (coming soon)
+  --deploys: Show only deployment status section
   --service: Override service auto-detection (e.g., --service=keeperhub-api)
-  --verbose: Show detailed output with dates, URLs
+  --verbose: Show detailed output with dates, URLs, and extended info
   --all: Show all PRs (not just mine)
   --team: Show team-related PRs
 ---
 
 # Status Command
 
-Display a unified dashboard showing your Jira tickets and GitHub PRs with optional filtering and service context.
+Display a unified dashboard showing your Jira tickets, GitHub PRs, and deployment status with optional filtering and service context.
 
 ## Usage
 
@@ -426,20 +426,301 @@ def render_github_section(service_context, verbose=False, all_prs=False, team=Fa
         return []
 ```
 
-### Step 8: Render Deploys Section (Placeholder)
+### Step 8: Render Deploys Section
 
 **Skip if --jira only or --prs only specified.**
 
-Deploy status integration is coming in the next update.
+**Requires service context:** Deployment status needs namespace and cluster information from service configuration.
 
+**If no service context:**
 ```
-Deploy Status
--------------
-[Coming Soon] Deploy status will be available in the next update.
+Deployments
+-----------
+[Service context required] Use --service=name or run from a configured repo
+```
 
-To check manually:
-- kubectl get deployments -n <namespace>
-- gh run list --repo <repo>
+**Get derived configuration:**
+```python
+def get_deploy_config(service_name, service_context):
+    """Get deployment configuration with derived defaults."""
+    return {
+        'eks_cluster': service_context.get('eks_cluster', f'keeperhub-prod'),
+        'namespace_staging': service_context.get('namespace_staging', f'{service_name}-staging'),
+        'namespace_prod': service_context.get('namespace_prod', service_name),
+        'aws_region': service_context.get('aws_region', 'us-east-1'),
+    }
+```
+
+**Check kubectl context:**
+```python
+def check_kubectl_context(expected_cluster):
+    """Verify kubectl is configured for the correct cluster."""
+    result = subprocess.run(
+        ['kubectl', 'config', 'current-context'],
+        capture_output=True,
+        text=True
+    )
+    if result.returncode != 0:
+        return None, "kubectl not configured"
+
+    current_context = result.stdout.strip()
+    # EKS contexts typically contain the cluster name
+    if expected_cluster not in current_context:
+        return current_context, f"context mismatch (expected {expected_cluster})"
+
+    return current_context, None
+```
+
+**Get deployment status for an environment:**
+```bash
+# Get deployment details with JSON output
+kubectl get deployment {service-name} -n {namespace} -o json
+
+# Check rollout status (with timeout to avoid hanging)
+kubectl rollout status deployment/{service-name} -n {namespace} --timeout=5s
+```
+
+**Parse deployment JSON:**
+```python
+def parse_deployment_status(deployment_json):
+    """Extract status from kubectl deployment JSON."""
+    spec = deployment_json.get('spec', {})
+    status = deployment_json.get('status', {})
+
+    # Get replica counts
+    desired = spec.get('replicas', 0)
+    ready = status.get('readyReplicas', 0)
+    available = status.get('availableReplicas', 0)
+
+    # Get image version from first container
+    containers = spec.get('template', {}).get('spec', {}).get('containers', [])
+    image = containers[0].get('image', '') if containers else ''
+    version = image.split(':')[-1] if ':' in image else 'latest'
+
+    # Determine status
+    conditions = status.get('conditions', [])
+    for condition in conditions:
+        if condition.get('type') == 'Available':
+            if condition.get('status') == 'True':
+                deploy_status = 'Deployed'
+            else:
+                deploy_status = 'Pending'
+            break
+        if condition.get('type') == 'Progressing':
+            if condition.get('reason') == 'ProgressDeadlineExceeded':
+                deploy_status = 'Failed'
+                break
+    else:
+        deploy_status = 'Unknown'
+
+    # Get last update time
+    last_update = None
+    for condition in conditions:
+        if condition.get('lastUpdateTime'):
+            last_update = condition.get('lastUpdateTime')
+            break
+
+    return {
+        'status': deploy_status,
+        'version': version,
+        'image': image,
+        'replicas_ready': ready,
+        'replicas_desired': desired,
+        'last_update': last_update,
+    }
+```
+
+**Calculate relative time:**
+```python
+def relative_time(iso_timestamp):
+    """Convert ISO timestamp to relative time (e.g., '2h ago', '3d ago')."""
+    from datetime import datetime, timezone
+
+    if not iso_timestamp:
+        return 'unknown'
+
+    try:
+        # Parse ISO 8601 timestamp
+        dt = datetime.fromisoformat(iso_timestamp.replace('Z', '+00:00'))
+        now = datetime.now(timezone.utc)
+        delta = now - dt
+
+        seconds = delta.total_seconds()
+        if seconds < 60:
+            return 'just now'
+        elif seconds < 3600:
+            mins = int(seconds / 60)
+            return f'{mins}m ago'
+        elif seconds < 86400:
+            hours = int(seconds / 3600)
+            return f'{hours}h ago'
+        else:
+            days = int(seconds / 86400)
+            return f'{days}d ago'
+    except:
+        return 'unknown'
+```
+
+**Full render function:**
+```python
+def render_deploys_section(service_name, service_context, verbose=False):
+    """Render deployment status section."""
+
+    # Check for service context
+    if not service_context:
+        print("Deployments")
+        print("-----------")
+        print("[Service context required] Use --service=name or run from a configured repo")
+        return []
+
+    deploy_config = get_deploy_config(service_name, service_context)
+    action_items = []
+
+    # Check kubectl context
+    current_context, context_error = check_kubectl_context(deploy_config['eks_cluster'])
+    if context_error:
+        print("Deployments")
+        print("-----------")
+        if context_error == "kubectl not configured":
+            cluster = deploy_config['eks_cluster']
+            region = deploy_config['aws_region']
+            print(f"[Unavailable] kubectl not configured - run `aws eks update-kubeconfig --name {cluster} --region {region}`")
+        else:
+            print(f"[Context mismatch] kubectl context is {current_context}, expected {deploy_config['eks_cluster']}")
+            print(f"Run: aws eks update-kubeconfig --name {deploy_config['eks_cluster']} --region {deploy_config['aws_region']}")
+        return []
+
+    environments = [
+        ('staging', deploy_config['namespace_staging']),
+        ('prod', deploy_config['namespace_prod']),
+    ]
+
+    print("Deployments")
+    print("-----------")
+
+    for env_name, namespace in environments:
+        try:
+            # Get deployment JSON
+            result = subprocess.run(
+                ['kubectl', 'get', 'deployment', service_name, '-n', namespace, '-o', 'json'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+
+            if result.returncode != 0:
+                error = result.stderr.strip()
+                if 'not found' in error.lower():
+                    print(f"{env_name:8} [Not Found]  No deployment in namespace {namespace}")
+                elif 'forbidden' in error.lower() or 'unauthorized' in error.lower():
+                    print(f"{env_name:8} [No Access]  Permission denied for namespace {namespace}")
+                else:
+                    print(f"{env_name:8} [Error]  {error[:50]}")
+                continue
+
+            deployment = json.loads(result.stdout)
+            status_info = parse_deployment_status(deployment)
+
+            # Format status display
+            status_label = status_info['status']
+            version = status_info['version']
+            relative = relative_time(status_info['last_update'])
+
+            # Check for failed state - add to action items
+            if status_label == 'Failed':
+                action_items.append(f"{env_name} [Failed] - deployment rollout failed")
+                print(f"{env_name:8} [Failed]    {version}  {relative}")
+            elif status_label == 'Pending':
+                print(f"{env_name:8} [Pending]   {version}  {relative}")
+            else:
+                print(f"{env_name:8} [Deployed]  {version}  {relative}")
+
+            if verbose:
+                image = status_info['image']
+                ready = status_info['replicas_ready']
+                desired = status_info['replicas_desired']
+                last_update = status_info['last_update'] or 'unknown'
+                print(f"         Image: {image}")
+                print(f"         Replicas: {ready}/{desired} ready  Updated: {last_update}")
+                print()
+
+        except subprocess.TimeoutExpired:
+            print(f"{env_name:8} [Timeout]   kubectl command timed out")
+        except json.JSONDecodeError:
+            print(f"{env_name:8} [Error]     Failed to parse kubectl output")
+        except FileNotFoundError:
+            print("Deployments")
+            print("-----------")
+            print("[Unavailable] kubectl not installed")
+            return []
+        except Exception as e:
+            print(f"{env_name:8} [Error]     {str(e)[:50]}")
+
+    return action_items
+```
+
+**Display format (compact):**
+```
+Deployments
+-----------
+staging  [Deployed]  v1.2.3  2h ago
+prod     [Deployed]  v1.2.2  3d ago
+```
+
+**Display format (--verbose):**
+```
+Deployments
+-----------
+staging  [Deployed]  v1.2.3  2h ago
+         Image: registry.io/app:v1.2.3
+         Replicas: 3/3 ready  Updated: 2024-01-25T14:30:00Z
+
+prod     [Deployed]  v1.2.2  3d ago
+         Image: registry.io/app:v1.2.2
+         Replicas: 5/5 ready  Updated: 2024-01-22T09:15:00Z
+```
+
+**Error states:**
+
+kubectl not configured:
+```
+Deployments
+-----------
+[Unavailable] kubectl not configured - run `aws eks update-kubeconfig --name keeperhub-prod --region us-east-1`
+```
+
+Wrong context:
+```
+Deployments
+-----------
+[Context mismatch] kubectl context is minikube, expected keeperhub-prod
+Run: aws eks update-kubeconfig --name keeperhub-prod --region us-east-1
+```
+
+Permission denied:
+```
+Deployments
+-----------
+staging  [No Access]  Permission denied for namespace keeperhub-api-staging
+prod     [Deployed]   v1.2.2  3d ago
+```
+
+Deployment not found:
+```
+Deployments
+-----------
+staging  [Not Found]  No deployment in namespace keeperhub-api-staging
+prod     [Deployed]   v1.2.2  3d ago
+```
+
+**Failed deployments in Needs Attention:**
+
+When a deployment has failed, it appears in the Needs Attention section:
+```
+Needs Attention
+---------------
+prod [Failed] - deployment rollout failed
+PR #789   Review requested: Add OAuth support
 ```
 
 ### Step 9: Summary Footer
@@ -484,6 +765,7 @@ def run_status_command(args):
     # Gather data from all sections first
     jira_actions = []
     pr_actions = []
+    deploy_actions = []
 
     if 'jira' in sections:
         jira_actions = gather_jira_actions(service_context)
@@ -491,7 +773,10 @@ def run_status_command(args):
     if 'prs' in sections:
         pr_actions = gather_pr_actions(service_context, args)
 
-    needs_attention = jira_actions + pr_actions
+    if 'deploys' in sections:
+        deploy_actions = gather_deploy_actions(service_name, service_context)
+
+    needs_attention = deploy_actions + jira_actions + pr_actions  # Deploys first (most urgent)
 
     # Step 5: Render needs attention (if any)
     if needs_attention:
@@ -516,7 +801,7 @@ def run_status_command(args):
         print()
 
     if 'deploys' in sections:
-        render_deploys_section(service_context)
+        render_deploys_section(service_name, service_context, verbose=args.get('verbose'))
         print()
 
     # Step 9: Footer
@@ -549,12 +834,13 @@ GitHub PRs
 #123  [Open] [CI: Pass]  feat: add login endpoint
 #789  [Open] [CI: Pass]  [ACTION] Add OAuth support
 
-Deploy Status
--------------
-[Coming Soon] Deploy status will be available in the next update.
+Deployments
+-----------
+staging  [Deployed]  v1.2.3  2h ago
+prod     [Deployed]  v1.2.2  3d ago
 
 ---
-Tickets: 2 | PRs: 2 | Deploys: --
+Tickets: 2 | PRs: 2 | Deploys: 2
 ```
 
 **Just Jira tickets:**
@@ -615,12 +901,38 @@ GitHub PRs
 ----------
 #123  [Open] [CI: Pass]  feat: add login endpoint
 
-Deploy Status
--------------
-[Coming Soon] Deploy status will be available in the next update.
+Deployments
+-----------
+staging  [Deployed]  v1.2.3  2h ago
+prod     [Deployed]  v1.2.2  3d ago
 
 ---
-Tickets: [Error] | PRs: 1 | Deploys: --
+Tickets: [Error] | PRs: 1 | Deploys: 2
+```
+
+**Failed deployment:**
+```
+=== KeeperHub Status: keeperhub-api ===
+
+Needs Attention
+---------------
+prod [Failed] - deployment rollout failed
+
+Jira Tickets
+------------
+KH-123  [In Progress]  Implement user authentication
+
+GitHub PRs
+----------
+#123  [Open] [CI: Pass]  feat: add login endpoint
+
+Deployments
+-----------
+staging  [Deployed]  v1.2.3  2h ago
+prod     [Failed]    v1.2.4  5m ago
+
+---
+Tickets: 1 | PRs: 1 | Deploys: 2
 ```
 
 ## Aliases
