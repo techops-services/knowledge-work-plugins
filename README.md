@@ -10,7 +10,7 @@ Each plugin bundles the skills, connectors, slash commands, and sub-agents for a
 
 ## Plugin Marketplace
 
-We're open-sourcing 11 plugins built and inspired by our own work:
+We're open-sourcing 12 plugins built and inspired by our own work:
 
 | Plugin | How it helps | Connectors |
 |--------|-------------|------------|
@@ -25,6 +25,7 @@ We're open-sourcing 11 plugins built and inspired by our own work:
 | **[enterprise-search](./enterprise-search)** | Find anything across email, chat, docs, and wikis — one query across all your company's tools. | Slack, Notion, Guru, Jira, Asana, Microsoft 365 |
 | **[bio-research](./bio-research)** | Connect to preclinical research tools and databases (literature search, genomics analysis, target prioritization) to accelerate early-stage life sciences R&D. | PubMed, BioRender, bioRxiv, ClinicalTrials.gov, ChEMBL, Synapse, Wiley, Owkin, Open Targets, Benchling |
 | **[cowork-plugin-management](./cowork-plugin-management)** | Create new plugins or customize existing ones for your organization's specific tools and workflows. | — |
+| **[kh](./kh)** | Unified KeeperHub development workflow — start work on tickets, create PRs, merge to staging, and track status across Jira, GitHub, and deployments. | Jira (Atlassian MCP), GitHub CLI, AWS/kubectl |
 
 Install these directly from Cowork, browse the full collection here on GitHub, or build your own.
 
@@ -38,10 +39,10 @@ Install plugins from [claude.com/plugins](https://claude.com/plugins/).
 
 ```bash
 # Add the marketplace first
-claude plugin marketplace add anthropics/knowledge-work-plugins
+claude plugin marketplace add techops-services/knowledge-work-plugins
 
 # Then install a specific plugin
-claude plugin install sales@knowledge-work-plugins
+claude plugin install kh@knowledge-work-plugins
 ```
 
 Once installed, plugins activate automatically. Skills fire when relevant, and slash commands are available in your session (e.g., `/sales:call-prep`, `/data:write-query`).
