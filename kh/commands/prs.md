@@ -286,6 +286,51 @@ def is_ready_to_merge(pr):
     has_changes_requested = any(r.get('state') == 'CHANGES_REQUESTED' for r in reviews)
 
     return ci_passed and has_approval and not has_changes_requested
+
+def categorize_pr(pr, current_user):
+    """Categorize a PR into exactly one group based on priority.
+
+    Priority hierarchy (highest to lowest):
+    1. Ready to Merge - CI passed AND approved AND no changes requested
+    2. Needs Your Review - You are requested as reviewer
+    3. Other Open PRs - Everything else
+
+    Returns: 'ready_to_merge', 'needs_review', or 'other'
+    """
+    # Priority 1: Check if ready to merge
+    if is_ready_to_merge(pr):
+        return 'ready_to_merge'
+
+    # Priority 2: Check if current user is requested as reviewer
+    review_requests = pr.get('reviewRequests', [])
+    if review_requests:
+        # Check if current user is in the review requests
+        for request in review_requests:
+            # Handle both user objects and team objects
+            requested_login = request.get('login') or request.get('slug', '')
+            if requested_login.lower() == current_user.lower() or requested_login == '@me':
+                return 'needs_review'
+
+    # Priority 3: Everything else
+    return 'other'
+
+def categorize_prs_by_group(prs, current_user='@me'):
+    """Categorize all PRs into mutually exclusive groups.
+
+    Returns dict with keys: 'ready_to_merge', 'needs_review', 'other'
+    Each PR appears in exactly one group.
+    """
+    groups = {
+        'ready_to_merge': [],
+        'needs_review': [],
+        'other': []
+    }
+
+    for pr in prs:
+        category = categorize_pr(pr, current_user)
+        groups[category].append(pr)
+
+    return groups
 ```
 
 ### Step 9: Display PRs (Compact Format)
@@ -293,68 +338,94 @@ def is_ready_to_merge(pr):
 Render PRs in compact format for quick scanning.
 
 ```python
-def render_prs_compact(prs, filter_mode, ready_filter=False):
-    """Render PRs in compact format."""
+def render_single_pr_compact(pr):
+    """Render a single PR in compact format."""
+    number = pr.get('number')
+    title = pr.get('title', '')[:40]
+    author = pr.get('author', {}).get('login', 'unknown')
+    branch = pr.get('headRefName', '')
+    labels = pr.get('labels', [])
+    reviews = pr.get('reviews', [])
+    review_requests = pr.get('reviewRequests', [])
+    created_at = pr.get('createdAt', '')
 
-    # Apply ready filter if requested
+    ci_label, _ = get_ci_status(pr.get('statusCheckRollup', []))
+    review_label, _ = get_review_status(reviews, review_requests)
+    days = format_days(days_open(created_at))
+    ticket = extract_ticket_from_pr(pr)
+    preview_url = get_preview_url(labels, number)
+    author_display = f"@{author}"
+
+    print(f"#{number:<4} {title:<40} {author_display:<12} {ci_label} {review_label:<14} {days}")
+
+    info_parts = [f"Branch: {branch}"]
+    if ticket:
+        info_parts.append(f"Ticket: {ticket}")
+    print(f"      {' | '.join(info_parts)}")
+
+    if preview_url:
+        print(f"      Preview: {preview_url}")
+
+    print()
+
+def render_prs_compact(prs, filter_mode, ready_filter=False):
+    """Render PRs in compact format with mutually exclusive groups."""
+
+    # If ready_filter is set, only show ready PRs (no grouping needed)
     if ready_filter:
-        prs = [pr for pr in prs if is_ready_to_merge(pr)]
+        ready_prs = [pr for pr in prs if is_ready_to_merge(pr)]
+        print(f"Ready to Merge ({len(ready_prs)})")
+        print("=" * 20)
+        print()
+        if not ready_prs:
+            print("No PRs ready to merge.")
+            return
+        for pr in ready_prs:
+            render_single_pr_compact(pr)
+        return
+
+    # Get current user for review matching
+    # For simplicity, use @me which gh CLI understands
+    groups = categorize_prs_by_group(prs, '@me')
+
+    total = len(prs)
 
     # Determine header based on filter mode
-    if ready_filter:
-        header = f"Ready to Merge ({len(prs)})"
-    elif filter_mode == 'needs-review':
-        header = f"PRs Needing Your Review ({len(prs)})"
+    if filter_mode == 'needs-review':
+        header = f"PRs Needing Your Review ({len(groups['needs_review'])})"
     elif filter_mode == 'team':
-        header = f"Open PRs ({len(prs)})"
+        header = f"Team PRs ({total})"
     else:
-        header = f"Open PRs ({len(prs)})"
+        header = f"My PRs ({total})"
 
     print(header)
     print("=" * len(header))
     print()
 
-    if not prs:
+    if total == 0:
         print("No open PRs matching your criteria.")
         return
 
-    for pr in prs:
-        number = pr.get('number')
-        title = pr.get('title', '')[:40]
-        author = pr.get('author', {}).get('login', 'unknown')
-        branch = pr.get('headRefName', '')
-        labels = pr.get('labels', [])
-        reviews = pr.get('reviews', [])
-        review_requests = pr.get('reviewRequests', [])
-        created_at = pr.get('createdAt', '')
+    # Render each group in priority order (only non-empty groups)
+    if groups['ready_to_merge']:
+        print(f"Ready to Merge ({len(groups['ready_to_merge'])}):")
+        print("-" * 30)
+        for pr in groups['ready_to_merge']:
+            render_single_pr_compact(pr)
+        print()
 
-        # Get status indicators
-        ci_label, _ = get_ci_status(pr.get('statusCheckRollup', []))
-        review_label, _ = get_review_status(reviews, review_requests)
-        days = format_days(days_open(created_at))
+    if groups['needs_review']:
+        print(f"Needs Your Review ({len(groups['needs_review'])}):")
+        print("-" * 30)
+        for pr in groups['needs_review']:
+            render_single_pr_compact(pr)
+        print()
 
-        # Get linked ticket
-        ticket = extract_ticket_from_pr(pr)
-
-        # Get preview URL
-        preview_url = get_preview_url(labels, number)
-
-        # Format author with @ prefix, pad for alignment
-        author_display = f"@{author}"
-
-        # Main line: #number  title  @author  [CI] [Review]  days
-        print(f"#{number:<4} {title:<40} {author_display:<12} {ci_label} {review_label:<14} {days}")
-
-        # Second line: branch and ticket info
-        info_parts = [f"Branch: {branch}"]
-        if ticket:
-            info_parts.append(f"Ticket: {ticket}")
-        print(f"      {' | '.join(info_parts)}")
-
-        # Third line: preview URL if available
-        if preview_url:
-            print(f"      Preview: {preview_url}")
-
+    if groups['other']:
+        print(f"Other Open PRs ({len(groups['other'])}):")
+        print("-" * 30)
+        for pr in groups['other']:
+            render_single_pr_compact(pr)
         print()
 ```
 
@@ -363,90 +434,125 @@ def render_prs_compact(prs, filter_mode, ready_filter=False):
 Render PRs with full details.
 
 ```python
-def render_prs_verbose(prs, filter_mode, ready_filter=False):
-    """Render PRs in verbose format with full details."""
+def render_single_pr_verbose(pr):
+    """Render a single PR in verbose format."""
+    number = pr.get('number')
+    title = pr.get('title', '')
+    author = pr.get('author', {}).get('login', 'unknown')
+    branch = pr.get('headRefName', '')
+    labels = pr.get('labels', [])
+    reviews = pr.get('reviews', [])
+    review_requests = pr.get('reviewRequests', [])
+    created_at = pr.get('createdAt', '')
+    body = pr.get('body', '')
+    url = pr.get('url', '')
 
-    # Apply ready filter if requested
+    # Get status indicators
+    ci_label, _ = get_ci_status(pr.get('statusCheckRollup', []))
+    review_label, _ = get_review_status(reviews, review_requests)
+    days = format_days(days_open(created_at))
+
+    # Get linked ticket
+    ticket = extract_ticket_from_pr(pr)
+
+    # Get preview URL
+    preview_url = get_preview_url(labels, number)
+
+    # Count commits and comments (estimate from body)
+    reviews_completed = len([r for r in reviews if r.get('state') in ['APPROVED', 'CHANGES_REQUESTED', 'COMMENTED']])
+
+    # Format author with @ prefix
+    author_display = f"@{author}"
+
+    # Main line: #number  title  @author  [CI] [Review]  days
+    print(f"#{number:<4} {title:<40} {author_display:<12} {ci_label} {review_label:<14} {days}")
+
+    # Second line: branch and ticket info
+    info_parts = [f"Branch: {branch}"]
+    if ticket:
+        info_parts.append(f"Ticket: {ticket}")
+    print(f"      {' | '.join(info_parts)}")
+
+    # Third line: preview URL if available
+    if preview_url:
+        print(f"      Preview: {preview_url}")
+
+    # Fourth line: description excerpt
+    if body:
+        # Get first non-empty line, truncated
+        description_lines = [line.strip() for line in body.split('\n') if line.strip()]
+        if description_lines:
+            excerpt = description_lines[0][:60]
+            if len(description_lines[0]) > 60:
+                excerpt += '...'
+            print(f"      Description: {excerpt}")
+
+    # Fifth line: comment/review count
+    print(f"      Comments: {reviews_completed} reviews")
+
+    # Sixth line: URL
+    if url:
+        print(f"      {url}")
+
+    print()
+
+def render_prs_verbose(prs, filter_mode, ready_filter=False):
+    """Render PRs in verbose format with full details and mutually exclusive groups."""
+
+    # If ready_filter is set, only show ready PRs (no grouping needed)
     if ready_filter:
-        prs = [pr for pr in prs if is_ready_to_merge(pr)]
+        ready_prs = [pr for pr in prs if is_ready_to_merge(pr)]
+        print(f"Ready to Merge ({len(ready_prs)})")
+        print("=" * 20)
+        print()
+        if not ready_prs:
+            print("No PRs ready to merge.")
+            return
+        for pr in ready_prs:
+            render_single_pr_verbose(pr)
+        return
+
+    # Get current user for review matching
+    groups = categorize_prs_by_group(prs, '@me')
+
+    total = len(prs)
 
     # Determine header based on filter mode
-    if ready_filter:
-        header = f"Ready to Merge ({len(prs)})"
-    elif filter_mode == 'needs-review':
-        header = f"PRs Needing Your Review ({len(prs)})"
+    if filter_mode == 'needs-review':
+        header = f"PRs Needing Your Review ({len(groups['needs_review'])})"
     elif filter_mode == 'team':
-        header = f"Open PRs ({len(prs)})"
+        header = f"Team PRs ({total})"
     else:
-        header = f"Open PRs ({len(prs)})"
+        header = f"My PRs ({total})"
 
     print(header)
     print("=" * len(header))
     print()
 
-    if not prs:
+    if total == 0:
         print("No open PRs matching your criteria.")
         return
 
-    for pr in prs:
-        number = pr.get('number')
-        title = pr.get('title', '')
-        author = pr.get('author', {}).get('login', 'unknown')
-        branch = pr.get('headRefName', '')
-        labels = pr.get('labels', [])
-        reviews = pr.get('reviews', [])
-        review_requests = pr.get('reviewRequests', [])
-        created_at = pr.get('createdAt', '')
-        body = pr.get('body', '')
-        url = pr.get('url', '')
+    # Render each group in priority order (only non-empty groups)
+    if groups['ready_to_merge']:
+        print(f"Ready to Merge ({len(groups['ready_to_merge'])}):")
+        print("-" * 30)
+        for pr in groups['ready_to_merge']:
+            render_single_pr_verbose(pr)
+        print()
 
-        # Get status indicators
-        ci_label, _ = get_ci_status(pr.get('statusCheckRollup', []))
-        review_label, _ = get_review_status(reviews, review_requests)
-        days = format_days(days_open(created_at))
+    if groups['needs_review']:
+        print(f"Needs Your Review ({len(groups['needs_review'])}):")
+        print("-" * 30)
+        for pr in groups['needs_review']:
+            render_single_pr_verbose(pr)
+        print()
 
-        # Get linked ticket
-        ticket = extract_ticket_from_pr(pr)
-
-        # Get preview URL
-        preview_url = get_preview_url(labels, number)
-
-        # Count commits and comments (estimate from body)
-        reviews_completed = len([r for r in reviews if r.get('state') in ['APPROVED', 'CHANGES_REQUESTED', 'COMMENTED']])
-
-        # Format author with @ prefix
-        author_display = f"@{author}"
-
-        # Main line: #number  title  @author  [CI] [Review]  days
-        print(f"#{number:<4} {title:<40} {author_display:<12} {ci_label} {review_label:<14} {days}")
-
-        # Second line: branch and ticket info
-        info_parts = [f"Branch: {branch}"]
-        if ticket:
-            info_parts.append(f"Ticket: {ticket}")
-        print(f"      {' | '.join(info_parts)}")
-
-        # Third line: preview URL if available
-        if preview_url:
-            print(f"      Preview: {preview_url}")
-
-        # Fourth line: description excerpt
-        if body:
-            # Get first non-empty line, truncated
-            description_lines = [line.strip() for line in body.split('\n') if line.strip()]
-            if description_lines:
-                excerpt = description_lines[0][:60]
-                if len(description_lines[0]) > 60:
-                    excerpt += '...'
-                print(f"      Description: {excerpt}")
-
-        # Fifth line: comment/review count
-        print(f"      Comments: {reviews_completed} reviews")
-
-        # Sixth line: URL
-        if url:
-            print(f"      {url}")
-
+    if groups['other']:
+        print(f"Other Open PRs ({len(groups['other'])}):")
+        print("-" * 30)
+        for pr in groups['other']:
+            render_single_pr_verbose(pr)
         print()
 ```
 
@@ -538,24 +644,31 @@ Open PRs (2)
 
 Output:
 ```
-Open PRs (5)
+Team PRs (5)
 ============
 
+Ready to Merge (1):
+------------------------------
 #123  KH-123: Add user auth              @alice       [CI: Pass] [Approved]      2d
       Branch: KH-123-auth | Ticket: KH-123
       Preview: https://pr-123.preview.example.com
 
-#456  Fix memory leak                    @bob         [CI: Fail] [Pending]       5d
+Needs Your Review (2):
+------------------------------
+#456  Fix memory leak                    @bob         [CI: Pass] [Pending]       5d
       Branch: fix/memory | Ticket: KH-456
 
-#789  Update API docs                    @carol       [CI: Pass] [Changes Req]   1d
+#789  Update API docs                    @carol       [CI: Pass] [Pending]       1d
       Branch: docs/api
 
+Other Open PRs (2):
+------------------------------
 #890  Add caching layer                  @dave        [CI: Pass] [No Review]     3d
       Branch: feat/caching
 
 #901  Refactor auth module               @eve         [CI: Pending] [Pending]    0d
       Branch: refactor/auth
+
 ```
 
 **PRs where I'm requested to review:**
