@@ -6,6 +6,7 @@ arguments:
   --body: Override auto-generated body
   --base: Target branch (default: staging)
   --no-link: Skip Jira ticket linking
+  --no-transition: Skip Jira ticket status transition (default: transitions to Review)
 ---
 
 # PR Command
@@ -305,6 +306,25 @@ def display_success(pr_url, pr_number, title, draft=False):
     print(pr_url)
 ```
 
+### Step 7: Transition Jira Ticket to Review
+
+After successful PR creation, transition the linked Jira ticket to "Review" status.
+
+**Transition function:**
+```python
+def transition_ticket_to_review(ticket_id):
+    """Transition Jira ticket to Review status after PR creation."""
+    try:
+        # Use Atlassian MCP to transition the ticket
+        atlassian_transition_issue(issue_key=ticket_id, transition="Review")
+        print(f"Transitioned {ticket_id} to Review")
+        return True
+    except Exception as e:
+        # Non-blocking - PR was created successfully, just log the transition failure
+        print(f"[Warning] Could not transition {ticket_id} to Review: {str(e)}")
+        return False
+```
+
 ## Complete Workflow
 
 ```python
@@ -367,6 +387,10 @@ def run_pr_command(args):
     pr_number = parse_pr_number(pr_url)
     print()
     display_success(pr_url, pr_number, title, draft)
+
+    # Step 7: Transition Jira ticket if detected and not skipped
+    if ticket_id and not args.get('no_link') and not args.get('no_transition'):
+        transition_ticket_to_review(ticket_id)
 ```
 
 ## Error Handling
@@ -455,6 +479,7 @@ Generated title: KH-123: Add auth
 
 Created PR #456: KH-123: Add auth
 https://github.com/org/repo/pull/456
+Transitioned KH-123 to Review
 ```
 
 **Create as draft:**
@@ -514,6 +539,23 @@ https://github.com/org/repo/pull/460
 ```
 
 Note: PR body will not include the Jira link section when --no-link is used.
+
+**Create PR without Jira transition:**
+```
+/kh:pr --no-transition
+```
+
+Output (branch: KH-123-add-auth):
+```
+Creating PR from branch KH-123-add-auth...
+Detected Jira ticket: KH-123
+Generated title: KH-123: Add auth
+
+Created PR #461: KH-123: Add auth
+https://github.com/org/repo/pull/461
+```
+
+Note: Jira ticket status remains unchanged when --no-transition is used.
 
 **Custom body:**
 ```
