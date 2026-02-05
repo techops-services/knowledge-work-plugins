@@ -18,9 +18,11 @@ Unified workflow for Jira tickets, GitHub PRs, and deployments.
 | Task | Command |
 |------|---------|
 | Check my work status | `/kh:status` |
+| Start work on ticket | `/kh:start KEEP-123` |
 | Create a PR | `/kh:pr` |
 | List my PRs | `/kh:prs` |
 | List team PRs | `/kh:prs --team` |
+| Merge PR & transition ticket | `/kh:merge` |
 | View a ticket | `/kh:ticket KH-123` |
 | Transition ticket | `/kh:ticket KH-123 --move staging` |
 | List my tickets | `/kh:tickets` |
@@ -44,6 +46,7 @@ Unified workflow for Jira tickets, GitHub PRs, and deployments.
 |---------|-------------|
 | `/kh:pr` | Create PR from current branch with auto-generated title and body |
 | `/kh:prs` | List open PRs with CI status, review state, and preview URLs |
+| `/kh:merge` | Merge PR and transition linked Jira ticket to Testing Staging |
 
 ### Jira Tickets
 
@@ -68,6 +71,7 @@ Unified workflow for Jira tickets, GitHub PRs, and deployments.
 | `/kh:ts` | `/kh:tickets` |
 | `/kh:issues` | `/kh:tickets` |
 | `/kh:my-tickets` | `/kh:tickets` |
+| `/kh:m` | `/kh:merge` |
 
 ## Common Workflows
 
@@ -86,8 +90,13 @@ Unified workflow for Jira tickets, GitHub PRs, and deployments.
 
 ### After Merge to Staging
 
-1. Plugin suggests: Move KH-123 to "Testing Staging"? [y/n]
-2. Or manually: `/kh:ticket KH-123 --move staging`
+1. Merge PR and transition ticket: `/kh:merge`
+   - Merges PR with squash
+   - Deletes branch
+   - Auto-transitions linked ticket to "Testing Staging"
+2. Or two-step process:
+   - Merge manually: `gh pr merge --squash`
+   - Then: `/kh:ticket KH-123 --move staging`
 3. Verify on staging environment
 4. When ready: `/kh:promote` (Phase 4)
 
