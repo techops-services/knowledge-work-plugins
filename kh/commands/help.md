@@ -52,6 +52,7 @@ Unified workflow for Jira tickets, GitHub PRs, and deployments.
 
 | Command | Description |
 |---------|-------------|
+| `/kh:start <id>` | Start work on a ticket - transition to In Progress and create branch |
 | `/kh:ticket <id>` | View ticket details and transition status |
 | `/kh:tickets` | List your tickets with status filtering |
 
@@ -72,14 +73,20 @@ Unified workflow for Jira tickets, GitHub PRs, and deployments.
 | `/kh:issues` | `/kh:tickets` |
 | `/kh:my-tickets` | `/kh:tickets` |
 | `/kh:m` | `/kh:merge` |
+| `/kh:begin` | `/kh:start` |
+| `/kh:work` | `/kh:start` |
 
 ## Common Workflows
 
 ### Starting Work on a Ticket
 
-1. Create feature branch: `git checkout -b KH-123-feature-name`
-2. Plugin suggests: Move KH-123 to "In Progress"? [y/n]
-3. Or manually: `/kh:ticket KH-123 --move progress`
+1. Start work with one command: `/kh:start KEEP-123`
+   - Auto-transitions ticket to "In Progress"
+   - Creates branch: `KEEP-123-descriptive-name`
+   - Checks out from staging
+2. Alternative manual approach:
+   - Create feature branch: `git checkout -b KH-123-feature-name`
+   - Transition manually: `/kh:ticket KH-123 --move progress`
 
 ### Submitting for Review
 
