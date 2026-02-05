@@ -47,12 +47,13 @@ def build_tickets_jql(status=None, project=None, all_tickets=False):
             'prod': 'Testing Prod',
             'done': 'Done',
             'blocked': 'Blocked',
+            'wontdo': "Won't do",
         }
         resolved_status = status_map.get(status.lower(), status)
         clauses.append(f'status = "{resolved_status}"')
     else:
-        # Default: exclude Done
-        clauses.append('status != Done')
+        # Default: exclude Done and Won't do (completed/cancelled work)
+        clauses.append('status NOT IN (Done, "Won\'t do")')
 
     # Build final JQL
     jql = " AND ".join(clauses)
@@ -62,10 +63,10 @@ def build_tickets_jql(status=None, project=None, all_tickets=False):
 ```
 
 **Example JQL outputs:**
-- Default: `assignee = currentUser() AND status != Done ORDER BY updated DESC`
+- Default: `assignee = currentUser() AND status NOT IN (Done, "Won't do") ORDER BY updated DESC`
 - With status: `assignee = currentUser() AND status = "In Progress" ORDER BY updated DESC`
-- With project: `assignee = currentUser() AND project = KH AND status != Done ORDER BY updated DESC`
-- All tickets: `project = KH AND status != Done ORDER BY updated DESC`
+- With project: `assignee = currentUser() AND project = KH AND status NOT IN (Done, "Won't do") ORDER BY updated DESC`
+- All tickets: `status NOT IN (Done, "Won't do") ORDER BY updated DESC`
 
 ### Step 2: Execute JQL via Atlassian MCP
 
@@ -423,6 +424,7 @@ For convenience, you can use shorthand status names:
 | prod | Testing Prod |
 | done | Done |
 | blocked | Blocked |
+| wontdo | Won't do |
 
 Example: `/kh:tickets --status progress` is equivalent to `/kh:tickets --status "In Progress"`
 
@@ -559,7 +561,7 @@ KH-102  Set up monitoring                         @me
 
 - Use `/kh:ticket KH-123` to view full details of a specific ticket
 - Use `/kh:ticket KH-123 --move staging` to transition after deploying to staging
-- Default filter excludes Done tickets; use `--status done` to see completed work
+- Default filter excludes Done and Won't do tickets; use `--status done` or `--status wontdo` to see those
 - Tickets are sorted by last updated date (newest first)
 - Use `--all` to see team workload, not just your tickets
 
