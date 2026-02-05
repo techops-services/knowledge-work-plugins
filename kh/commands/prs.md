@@ -180,15 +180,34 @@ def format_days(days):
 ### Step 5: Extract Preview URL from Labels
 
 Detect PRs with deploy-pr-environment label and derive preview URL.
+The gh CLI may return labels in different formats depending on the query:
+- Sometimes as dict objects: `{'name': 'label-name', 'description': '...'}`
+- Sometimes as plain strings: `'label-name'`
+
+The function handles both formats gracefully.
 
 ```python
 def get_preview_url(labels, pr_number):
-    """Extract preview URL from labels if deploy-pr-environment is present."""
+    """Extract preview URL from labels if deploy-pr-environment is present.
+
+    Handles two label formats from gh CLI:
+    1. Dict format: {'name': 'deploy-pr-environment', 'description': '...'}
+    2. String format: 'deploy-pr-environment'
+    """
     for label in labels:
-        label_name = label.get('name', '')
+        # Handle both string and dict label formats
+        if isinstance(label, str):
+            label_name = label
+            description = ''
+        elif isinstance(label, dict):
+            label_name = label.get('name', '')
+            description = label.get('description', '')
+        else:
+            # Skip unknown formats
+            continue
+
         if label_name == 'deploy-pr-environment':
             # Check if label description contains URL
-            description = label.get('description', '')
             if description and description.startswith('http'):
                 return description
 
@@ -198,6 +217,7 @@ def get_preview_url(labels, pr_number):
 
     return None
 ```
+
 
 ### Step 6: Detect Linked Jira Ticket
 
